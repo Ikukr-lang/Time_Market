@@ -1,261 +1,198 @@
-// static/script.js
-
 const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+tg.ready(); tg.expand();
 
-let currentUser = null;
-let isAdmin = false;
-let myCompanies = [];
-let selectedCompanyId = null;
-let selectedDate = null;
-let selectedTimeSlot = null;
+let currentCompany = null;
+let currentStep = 1;
+let specialists = [];
+let services = [];
 
-// ────────────────────────────────────────────────
-// ИНИЦИАЛИЗАЦИЯ
-// ────────────────────────────────────────────────
-
-document.addEventListener("DOMContentLoaded", async () => {
-  // Показываем загрузку
-  document.getElementById("companies-list").innerHTML = "<p>Загрузка...</p>";
-
-  // Проверяем, есть ли у пользователя компании
-  await checkUserCompanies();
-
-  // Настраиваем основную кнопку Telegram
-  tg.MainButton.setText("Выбрать время");
-  tg.MainButton.hide();
-
-  tg.MainButton.onClick(handleBooking);
-});
-
-// ────────────────────────────────────────────────
-// ПРОВЕРКА КОМПАНИЙ ПОЛЬЗОВАТЕЛЯ
-// ────────────────────────────────────────────────
-
-async function checkUserCompanies() {
-  try {
-    const response = await fetch("/api/my_companies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData: tg.initData })
-    });
-
-    const data = await response.json();
-
-    if (data.companies && data.companies.length > 0) {
-      isAdmin = true;
-      myCompanies = data.companies;
-      showAdminPanel();
-    } else {
-      isAdmin = false;
-      showClientView();
-    }
-  } catch (err) {
-    console.error("Ошибка загрузки компаний:", err);
-    document.getElementById("companies-list").innerHTML = 
-      "<p style='color:red;'>Ошибка загрузки данных</p>";
-  }
+// Главный экран
+function showMainMenu() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('main-menu').classList.add('active');
 }
 
-// ────────────────────────────────────────────────
-// РЕЖИМ КЛИЕНТА (просмотр компаний)
-// ────────────────────────────────────────────────
-
-function showClientView() {
-  let html = `
-    <h2>Доступные компании</h2>
-    <div id="companies-container"></div>
-    
-    <div style="margin-top: 24px; text-align: center;">
-      <button class="admin-btn" onclick="startCreateCompany()">
-        Создать свою компанию
-      </button>
-    </div>
-  `;
-
-  document.getElementById("companies-list").innerHTML = html;
-
-  // Загружаем публичный список компаний (можно позже сделать отдельный эндпоинт)
-  loadPublicCompanies();
-}
-
-async function loadPublicCompanies() {
-  // Пока используем те же данные, что и мои компании (для теста)
-  // В будущем — отдельный /api/public_companies
-  const container = document.getElementById("companies-container");
-
-  // Пример: показываем компании текущего пользователя или заглушки
-  if (myCompanies.length > 0) {
-    myCompanies.forEach(c => {
-      const div = document.createElement("div");
-      div.className = "company-card";
-      div.innerHTML = `
-        <h3>${c.name}</h3>
-        <p>Ссылка для клиентов: <a href="/company/${c.id}" target="_blank">Открыть</a></p>
-      `;
-      container.appendChild(div);
-    });
+async function checkCompanies() {
+  const res = await fetch("/api/my_companies", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({initData: tg.initData})
+  });
+  const data = await res.json();
+  if (data.companies && data.companies.length > 0) {
+    currentCompany = data.companies[0];
+    showAdminPanel();
   } else {
-    container.innerHTML = "<p>Пока нет доступных компаний</p>";
+    showMainMenu();
   }
 }
 
-// ────────────────────────────────────────────────
-// СОЗДАНИЕ КОМПАНИИ
-// ────────────────────────────────────────────────
-
-function startCreateCompany() {
+// Поддержка
+function showSupport() {
   tg.showPopup({
-    title: "Создание компании",
-    message: "Введите название компании",
+    title: "Поддержка",
+    message: "Напишите ваш вопрос:",
     buttons: [{type: "ok"}, {type: "cancel"}]
-  }, async (button) => {
-    if (button !== "ok") return;
-
-    let name = prompt("Название компании:");
-    if (!name || name.trim() === "") return tg.showAlert("Название обязательно");
-
-    let photo = prompt("Ссылка на фото компании (можно пропустить):") || "";
-    let description = prompt("Короткое описание:");
-    let address = prompt("Адрес (город, улица):");
-
-    try {
-      const res = await fetch("/api/create_company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initData: tg.initData,
-          name: name.trim(),
-          photo,
-          description: description || "",
-          address: address || ""
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        tg.showAlert(`Компания "${name}" создана!\n\nСсылка для клиентов:\n${location.origin}/company/${data.company_id}`);
-        location.reload(); // перезагружаем, чтобы увидеть админ-панель
-      } else {
-        tg.showAlert("Ошибка: " + (data.error || "неизвестная ошибка"));
-      }
-    } catch (err) {
-      tg.showAlert("Ошибка сети");
-      console.error(err);
+  }, (btn) => {
+    if (btn === "ok") {
+      let question = prompt("Ваш вопрос:");
+      if (question) tg.showAlert("✅ Сообщение отправлено администратору!");
     }
   });
 }
 
-// ────────────────────────────────────────────────
-// АДМИН-ПАНЕЛЬ (для владельцев)
-// ────────────────────────────────────────────────
+// Создание компании
+function startCreateCompany() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('create-screen').classList.add('active');
+  currentStep = 1;
+  specialists = [];
+  services = [];
+  renderCreateStep();
+}
 
-function showAdminPanel() {
-  let html = `<h2>Мои компании (${myCompanies.length})</h2>`;
-
-  myCompanies.forEach(company => {
-    html += `
-      <div class="admin-company-card">
-        <h3>${company.name}</h3>
-        
-        <div class="company-link">
-          <strong>Ссылка для клиентов:</strong><br>
-          <a href="/company/${company.id}" target="_blank">
-            ${location.origin}/company/${company.id}
-          </a>
-          <button class="copy-btn" onclick="copyLink('/company/${company.id}')">Копировать</button>
-        </div>
-
-        <div style="margin-top: 16px;">
-          <button onclick="addSpecialist(${company.id})">+ Добавить специалиста</button>
-          <button onclick="addService(${company.id})">+ Добавить услугу</button>
-          <!-- Можно добавить кнопку "Настроить календарь" -->
-        </div>
+function renderCreateStep() {
+  const content = document.getElementById('step-content');
+  if (currentStep === 1) {
+    content.innerHTML = `
+      <div class="card">
+        <input type="text" id="name" placeholder="Название компании" style="width:100%;padding:12px;margin-bottom:12px;">
+        <input type="text" id="photo" placeholder="Ссылка на фото компании">
+        <button onclick="nextStep()" style="width:100%;padding:14px;background:#0088cc;color:white;border:none;border-radius:8px;">Далее</button>
       </div>
     `;
-  });
-
-  document.getElementById("companies-list").innerHTML = html;
-}
-
-function copyLink(path) {
-  const fullLink = location.origin + path;
-  navigator.clipboard.writeText(fullLink).then(() => {
-    tg.showAlert("Ссылка скопирована!");
-  }).catch(() => {
-    tg.showAlert("Не удалось скопировать");
-  });
-}
-
-// ────────────────────────────────────────────────
-// ДОБАВЛЕНИЕ СПЕЦИАЛИСТА
-// ────────────────────────────────────────────────
-
-function addSpecialist(companyId) {
-  tg.showPopup({
-    title: "Новый специалист",
-    message: "Введите данные специалиста",
-    buttons: [{type: "ok"}, {type: "cancel"}]
-  }, async (button) => {
-    if (button !== "ok") return;
-
-    let name = prompt("Имя:");
-    if (!name) return;
-
-    let surname = prompt("Фамилия:");
-    let photo = prompt("Фото специалиста (URL):") || "";
-
-    try {
-      const res = await fetch("/api/add_specialist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initData: tg.initData,
-          company_id: companyId,
-          name: name.trim(),
-          surname: surname || "",
-          photo
-        })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        tg.showAlert("Специалист добавлен!");
-        location.reload(); // обновляем список
-      } else {
-        tg.showAlert("Ошибка добавления");
-      }
-    } catch (err) {
-      tg.showAlert("Ошибка сети");
-    }
-  });
-}
-
-// ────────────────────────────────────────────────
-// ЗАГЛУШКА ДЛЯ УСЛУГ (можно развить аналогично)
-// ────────────────────────────────────────────────
-
-function addService(companyId) {
-  tg.showAlert("Добавление услуг пока в разработке.\nСкоро появится!");
-  // Здесь будет похожий prompt / popup + POST /api/add_service
-}
-
-// ────────────────────────────────────────────────
-// ОБРАБОТКА ЗАПИСИ (пока заглушка)
-// ────────────────────────────────────────────────
-
-function handleBooking() {
-  if (!selectedTimeSlot) {
-    tg.showAlert("Выберите время в календаре");
-    return;
+  } else if (currentStep === 2) {
+    content.innerHTML = `
+      <div class="card">
+        <input type="text" id="description" placeholder="Описание">
+        <input type="text" id="address" placeholder="Адрес">
+        <button onclick="nextStep()" style="width:100%;padding:14px;background:#0088cc;color:white;border:none;border-radius:8px;">Далее → Специалисты</button>
+      </div>
+    `;
+  } else if (currentStep === 3) {
+    content.innerHTML = `
+      <h3>Специалисты</h3>
+      <div id="spec-list"></div>
+      <button onclick="addSpecialistPrompt()" style="width:100%;padding:14px;">+ Добавить специалиста</button>
+      <button onclick="nextStep()" style="width:100%;padding:14px;background:#0088cc;color:white;border:none;border-radius:8px;margin-top:12px;">Далее → Услуги</button>
+    `;
+    renderSpecialists();
+  } else if (currentStep === 4) {
+    content.innerHTML = `
+      <h3>Услуги</h3>
+      <div id="service-list"></div>
+      <button onclick="addServicePrompt()" style="width:100%;padding:14px;">+ Добавить услугу</button>
+      <button onclick="finishCreation()" style="width:100%;padding:14px;background:#00cc66;color:white;border:none;border-radius:8px;margin-top:12px;">Завершить создание</button>
+    `;
+    renderServices();
   }
-
-  tg.showConfirm(`Записаться на ${selectedTimeSlot}?`, (confirmed) => {
-    if (confirmed) {
-      tg.showAlert("Запись отправлена! (демо-режим)");
-      // Здесь будет реальный fetch на /api/book
-    }
-  });
 }
+
+function nextStep() {
+  if (currentStep === 1) {
+    const name = document.getElementById('name').value.trim();
+    const photo = document.getElementById('photo').value;
+    if (!name) return tg.showAlert("Название обязательно!");
+    currentCompany = {name, photo};
+  } else if (currentStep === 2) {
+    currentCompany.description = document.getElementById('description').value;
+    currentCompany.address = document.getElementById('address').value;
+  }
+  currentStep++;
+  renderCreateStep();
+}
+
+function addSpecialistPrompt() {
+  const name = prompt("Имя специалиста:");
+  const surname = prompt("Фамилия:");
+  const photo = prompt("Ссылка на фото (круглое):") || "https://via.placeholder.com/60";
+  if (name) {
+    specialists.push({name, surname, photo});
+    renderSpecialists();
+  }
+}
+
+function renderSpecialists() {
+  const list = document.getElementById('spec-list');
+  list.innerHTML = specialists.map((s,i) => `
+    <div class="card" style="display:flex;align-items:center;">
+      <img src="${s.photo}" class="photo" style="margin-right:12px;">
+      <div><b>${s.surname} ${s.name}</b></div>
+    </div>
+  `).join('');
+}
+
+function addServicePrompt() {
+  const name = prompt("Название услуги:");
+  const price = prompt("Стоимость (₽):");
+  const duration = prompt("Длительность (мин):");
+  if (name && price) {
+    services.push({name, price, duration});
+    renderServices();
+  }
+}
+
+function renderServices() {
+  const list = document.getElementById('service-list');
+  list.innerHTML = services.map(s => `
+    <div class="card">${s.name} — ${s.price}₽ (${s.duration} мин)</div>
+  `).join('');
+}
+
+async function finishCreation() {
+  const payload = {
+    initData: tg.initData,
+    name: currentCompany.name,
+    photo: currentCompany.photo,
+    description: currentCompany.description || "",
+    address: currentCompany.address || ""
+  };
+
+  const res = await fetch("/api/create_company", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    // Добавляем специалистов и услуги
+    for (let s of specialists) {
+      await fetch("/api/add_specialist", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData: tg.initData, company_id: data.company_id, ...s})});
+    }
+    for (let srv of services) {
+      await fetch("/api/add_service", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({initData: tg.initData, company_id: data.company_id, ...srv})});
+    }
+
+    tg.showAlert(`Компания создана!\nСсылка для клиентов:\n${location.origin}/company/${data.company_id}`);
+    location.reload();
+  }
+}
+
+// Админ-панель
+async function showAdminPanel() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('admin-screen').classList.add('active');
+
+  const html = `
+    <div class="card">
+      <h3>${currentCompany.name}</h3>
+      <p>Ссылка для записи:</p>
+      <a href="/company/${currentCompany.id}" target="_blank" style="color:#0088cc;">${location.origin}/company/${currentCompany.id}</a>
+      <button onclick="copyLink()" style="width:100%;margin-top:12px;">Копировать ссылку</button>
+    </div>
+    <h3>Специалисты</h3>
+    <div id="admin-specs"></div>
+    <button onclick="addSpecialistPromptAdmin()">+ Добавить специалиста</button>
+  `;
+  document.getElementById('admin-content').innerHTML = html;
+  renderAdminSpecialists();
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(`${location.origin}/company/${currentCompany.id}`);
+  tg.showAlert("Ссылка скопирована!");
+}
+
+// Запуск
+checkCompanies();
