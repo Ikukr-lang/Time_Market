@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Маркетплейс записи</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div id="app">
+  <h1>Запись к специалистам</h1>
+
+  <div id="companies-list"></div>
+
+  <div id="calendar-container" style="display:none; margin-top:20px;">
+    <h2>Календарь доступного времени</h2>
+    <div id="calendar"></div>
+  </div>
+
+  <button id="book-btn" style="display:none; margin-top:16px; padding:12px; width:100%; background:#0088cc; color:white; border:none; border-radius:8px; font-size:18px;">
+    Записаться на выбранное время
+  </button>
+</div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
