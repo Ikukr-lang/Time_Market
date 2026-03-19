@@ -1,0 +1,8 @@
+aiogram==3.13.1
+aiosqlite==0.20.0
+sqlalchemy[asyncio]==2.0.35
+aiohttp==3.10.10
+python-dotenv==1.0.1
+yookassa==3.5.0
+python-dateutil==2.9.0.post0
+pytz==2024.2
