@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Маркетплейс записи</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
@@ -10,22 +10,25 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-
-<div id="app">
-  <h1>Запись к специалистам</h1>
-
-  <div id="companies-list"></div>
-
-  <div id="calendar-container" style="display:none; margin-top:20px;">
-    <h2>Календарь доступного времени</h2>
-    <div id="calendar"></div>
+  <div id="main-menu" class="screen">
+    <h1>Маркетплейс</h1>
+    <button class="big-btn support" onclick="showSupport()">Поддержка</button>
+    <button class="big-btn create" onclick="startCreateCompany()">Создать компанию</button>
   </div>
 
-  <button id="book-btn" style="display:none; margin-top:16px; padding:12px; width:100%; background:#0088cc; color:white; border:none; border-radius:8px; font-size:18px;">
-    Записаться на выбранное время
-  </button>
-</div>
+  <!-- Экран создания компании -->
+  <div id="create-screen" class="screen hidden">
+    <h2>Создание компании</h2>
+    <!-- шаги будут переключаться через JS -->
+    <div id="step-content"></div>
+  </div>
 
-<script src="/static/script.js"></script>
+  <!-- Админ-панель -->
+  <div id="admin-screen" class="screen hidden">
+    <h2>Админ-панель</h2>
+    <div id="admin-content"></div>
+  </div>
+
+  <script src="/static/script.js"></script>
 </body>
 </html>
