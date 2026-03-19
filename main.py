@@ -1,130 +1,95 @@
-import asyncio
-import os
-import logging
-import hmac
-import hashlib
-from urllib.parse import parse_qs
+# ... (всё предыдущее остаётся) ...
 
-from aiogram import Bot, Dispatcher
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from aiogram.filters import Command
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
-import aiohttp_jinja2
-import jinja2
+# Временное хранилище (потом заменить на БД)
+companies = {}          # company_id → data
+company_counter = 1
 
-from config import BOT_TOKEN, WEBAPP_SECRET, BASE_URL
+user_companies = {}     # telegram_id → list[company_ids]
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ── API ──
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-
-WEBHOOK_PATH = "/telegram-webhook"
-WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
-
-# Проверка initData (Telegram Web App auth)
-def validate_init_data(init_data_str: str) -> dict | None:
-    try:
-        params = parse_qs(init_data_str)
-        hash_value = params.pop('hash', [''])[0]
-        if not hash_value:
-            return None
-
-        data_check_string = '\n'.join(f"{k}={v[0]}" for k, v in sorted(params.items()))
-        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-        calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
-        if calculated == hash_value:
-            user_data = json.loads(params.get('user', ['{}'])[0])
-            return user_data
-        return None
-    except Exception as e:
-        logger.error(f"InitData validation error: {e}")
-        return None
-
-# ── Bot handlers ──
-
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(
-            text="Открыть маркетплейс",
-            web_app=WebAppInfo(url=f"{BASE_URL}/")
-        )
-    ]])
-    await message.answer(
-        "Добро пожаловать в маркетплейс записи к специалистам!\n\n"
-        "Нажмите кнопку ниже, чтобы открыть приложение:",
-        reply_markup=keyboard
-    )
-
-# ── API endpoints для Mini App ──
-
-async def api_companies(request):
-    # TODO: из базы данных
-    data = [
-        {"id": 1, "name": "Салон Красоты VIP", "rating": 4.8, "specialists": 5},
-        {"id": 2, "name": "Автосервис Master", "rating": 4.6, "specialists": 3},
-    ]
-    return web.json_response({"companies": data})
-
-async def api_book(request):
+async def api_create_company(request):
     data = await request.json()
     init_data = data.get("initData")
     user = validate_init_data(init_data)
     if not user:
-        return web.json_response({"error": "Invalid authentication"}, status=403)
+        return web.json_response({"error": "Не авторизован"}, status=403)
 
-    # TODO: сохранить запись в БД
-    logger.info(f"Booking from user {user.get('id')}: {data.get('booking')}")
+    global company_counter
+    company_id = company_counter
+    company_counter += 1
 
-    return web.json_response({"success": True, "message": "Запись создана!"})
+    companies[company_id] = {
+        "id": company_id,
+        "owner_id": user["id"],
+        "name": data.get("name", "Без названия"),
+        "photo": data.get("photo", None),
+        "description": data.get("description", ""),
+        "address": data.get("address", ""),
+        "specialists": [],
+        "services": [],
+    }
 
-# ── Mini App главная страница ──
+    if user["id"] not in user_companies:
+        user_companies[user["id"]] = []
+    user_companies[user["id"]].append(company_id)
 
-@aiohttp_jinja2.template("index.html")
-async def mini_app_page(request):
-    return {"base_url": BASE_URL}
+    return web.json_response({"success": True, "company_id": company_id})
 
-def create_app():
-    app = web.Application()
+async def api_my_companies(request):
+    data = await request.json()
+    user = validate_init_data(data.get("initData"))
+    if not user:
+        return web.json_response({"companies": []})
 
-    aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader("templates"))
+    my_ids = user_companies.get(user["id"], [])
+    my_list = [companies.get(cid, {}) for cid in my_ids]
+    return web.json_response({"companies": my_list})
 
-    # Статические файлы
-    app.router.add_static("/static/", path="static", name="static")
+async def api_company_details(request):
+    company_id = request.match_info.get("id")
+    try:
+        cid = int(company_id)
+        comp = companies.get(cid, {})
+        return web.json_response(comp)
+    except:
+        return web.json_response({"error": "Компания не найдена"}, status=404)
 
-    # Страницы и API
-    app.router.add_get("/", mini_app_page)
-    app.router.add_get("/api/companies", api_companies)
-    app.router.add_post("/api/book", api_book)
+async def api_add_specialist(request):
+    data = await request.json()
+    user = validate_init_data(data.get("initData"))
+    if not user:
+        return web.json_response({"error": "Не авторизован"}, status=403)
 
-    # Telegram webhook
-    webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    webhook_handler.register(app, path=WEBHOOK_PATH)
+    cid = data.get("company_id")
+    if cid not in companies or companies[cid]["owner_id"] != user["id"]:
+        return web.json_response({"error": "Нет доступа"}, status=403)
 
-    setup_application(app, dp, bot=bot)
+    specialist = {
+        "name": data.get("name"),
+        "surname": data.get("surname"),
+        "photo": data.get("photo"),
+    }
+    companies[cid]["specialists"].append(specialist)
+    return web.json_response({"success": True})
 
-    return app
+# Добавь аналогично для услуг и слотов календаря
 
-async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook установлен: {WEBHOOK_URL}")
+# В create_app() добавь новые роуты:
+app.router.add_post("/api/create_company", api_create_company)
+app.router.add_post("/api/add_specialist", api_add_specialist)
+app.router.add_post("/api/my_companies", api_my_companies)
+app.router.add_get("/api/company/{id}", api_company_details)
 
-async def main():
-    app = create_app()
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 10000)))
-    await site.start()
-
-    logger.info(f"Сервер запущен → {BASE_URL}")
-
-    await on_startup()
-    await asyncio.Event().wait()  # бесконечный цикл
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Новый роут для публичной страницы компании
+@aiohttp_jinja2.template("company.html")
+async def company_page(request):
+    company_id = request.match_info.get("id")
+    try:
+        cid = int(company_id)
+        comp = companies.get(cid, {})
+        return {"company": comp, "base_url": BASE_URL}
+    except:
+        return {"company": {}}
+    
+app.router.add_get("/company/{id}", company_page)
