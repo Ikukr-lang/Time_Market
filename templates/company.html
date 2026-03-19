@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>{{company.name or 'Компания'}}</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>{{company.name}}</h1>
+    {% if company.photo %}
+      <img src="{{company.photo}}" alt="Фото" style="max-width:100%; border-radius:12px;">
+    {% endif %}
+    <p>{{company.description}}</p>
+    <p><strong>Адрес:</strong> {{company.address}}</p>
+
+    <h2>Специалисты</h2>
+    <ul>
+      {% for spec in company.specialists %}
+        <li>{{spec.surname}} {{spec.name}}</li>
+      {% endfor %}
+    </ul>
+
+    <h2>Календарь записи</h2>
+    <div id="calendar"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      var calendarEl = document.getElementById('calendar');
+      var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ru',
+        firstDay: 1,
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek'
+        },
+        events: [
+          // TODO: реальные слоты
+          { title: 'Свободно 10:00–11:00', start: '2026-03-25T10:00:00', end: '2026-03-25T11:00:00' }
+        ],
+        dateClick: function(info) {
+          alert('Вы выбрали: ' + info.dateStr + '\nДоступные часы будут показаны в timeGrid');
+          // Переключение на timeGridWeek для выбранной недели
+          calendar.changeView('timeGridWeek', info.dateStr);
+        }
+      });
+      calendar.render();
+    });
+  </script>
+</body>
+</html>
