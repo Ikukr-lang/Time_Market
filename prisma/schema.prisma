@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  ownerTgId   BigInt
+  createdAt   DateTime     @default(now())
+  specialists Specialist[]
+}
+
+model Specialist {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  surname   String?
+  photoUrl  String?
+  company   Company   @relation(fields: [companyId], references: [id])
+  services  Service[]
+  bookings  Booking[]
+}
+
+model Service {
+  id           String     @id @default(cuid())
+  specialistId String
+  name         String
+  price        Float
+  duration     Int        // в минутах
+  specialist   Specialist @relation(fields: [specialistId], references: [id])
+}
+
+model Booking {
+  id           String     @id @default(cuid())
+  specialistId String
+  serviceId    String
+  clientTgId   BigInt?
+  clientName   String?
+  startTime    DateTime
+  status       String     @default("confirmed")
+  specialist   Specialist @relation(fields: [specialistId], references: [id])
+  service      Service    @relation(fields: [serviceId], references: [id])
+}
